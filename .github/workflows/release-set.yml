@@ -5,7 +5,7 @@ name: LO WASM Release Set
 #   resolve-release-set  — validate the dispatched public manifest against the
 #                          private release-set source's committed content
 #                          (deviation 1/1b; fetched via read deploy key, secret
-#                          RELEASE_SET_REPOSITORY + RELEASE_SET_READ_DEPLOY_KEY)
+#                          SOURCE_REPOSITORY + SOURCE_READ_DEPLOY_KEY)
 #   build                — SERIAL heavy emscripten matrix (max-parallelism: 1,
 #                          BUILD_JOBS=4, 350-min timeout; AC11: one LO compile
 #                          at a time, RAM-limited, ~350 min each)
@@ -59,6 +59,7 @@ jobs:
   resolve-release-set:
     if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    environment: Candidate Build
     timeout-minutes: 10
     name: Resolve release set
     outputs:
@@ -74,40 +75,27 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Checkout private release-set source
-        uses: actions/checkout@v6
-        with:
-          repository: ${{ secrets.RELEASE_SET_REPOSITORY }}
-          ssh-key: ${{ secrets.RELEASE_SET_READ_DEPLOY_KEY }}
-          path: release-set-repo
-          persist-credentials: false
-          submodules: 'false'
-
       - name: Validate source contract
         id: contract
         env:
+          CONFIGURED_SOURCE_REPOSITORY: ${{ secrets.SOURCE_REPOSITORY }}
           CONTRACT_VERSION: ${{ github.event_name == 'workflow_dispatch' && '1' || github.event.client_payload.contract_version }}
-          # Deviation 1b: the upstream LO core commit is identity-only. It is
-          # validated as 40-hex by the contract script and NEVER resolved
-          # against the release-set source's Git.
+          # Deviation 1b: the source revision is identity-only. It is validated
+          # as 40-hex and pinned as a checkout ref; it is NEVER resolved against
+          # the source's other history.
           SOURCE_REVISION: ${{ inputs.source_revision || github.event.client_payload.source_revision }}
           RELEASE_ID: ${{ inputs.release_id || github.event.client_payload.release_id }}
           DISPATCH_MANIFEST: ${{ inputs.manifest || toJSON(github.event.client_payload.manifest) }}
         run: |
+          [[ "$CONFIGURED_SOURCE_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || {
+            echo "::error::Repository secret SOURCE_REPOSITORY is missing or invalid"
+            exit 1
+          }
           printf '%s\n' "$DISPATCH_MANIFEST" > release-set.json
           bash ci/build-info-contract.sh validate-source-manifest \
             --manifest release-set.json \
             --contract-version "$CONTRACT_VERSION" \
             --source-revision "$SOURCE_REVISION" \
-            --release-id "$RELEASE_ID"
-
-          # Independent builder-side verification (deviation 1: the manifest is
-          # re-derived from the private release-set source's committed content,
-          # always read from that checkout's committed tree).
-          python3 build/release_set.py verify \
-            --repo-root release-set-repo \
-            --source-revision "$SOURCE_REVISION" \
-            --manifest release-set.json \
             --release-id "$RELEASE_ID"
           {
             echo "contract_version=$CONTRACT_VERSION"
@@ -120,6 +108,28 @@ jobs:
               --source-revision "$SOURCE_REVISION" \
               --release-id "$RELEASE_ID")"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout compilation source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          repository: ${{ secrets.SOURCE_REPOSITORY }}
+          ref: ${{ steps.contract.outputs.source_revision }}
+          path: source
+          ssh-key: ${{ secrets.SOURCE_READ_DEPLOY_KEY }}
+          submodules: 'false'
+
+      - name: Verify pinned source contract
+        id: source
+        env:
+          SOURCE_REVISION: ${{ steps.contract.outputs.source_revision }}
+          RELEASE_ID: ${{ steps.contract.outputs.release_id }}
+        run: |
+          python3 build/release_set.py verify \
+            --repo-root source \
+            --source-revision "$SOURCE_REVISION" \
+            --manifest release-set.json \
+            --release-id "$RELEASE_ID"
 
   build-info-contract-test:
     runs-on: ubuntu-latest
@@ -139,6 +149,7 @@ jobs:
     if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch' }}
     needs: resolve-release-set
     runs-on: ubuntu-latest
+    environment: Candidate Build
     timeout-minutes: 350
     name: Candidate build (${{ matrix.build_role }}, ${{ matrix.target_id }})
     strategy:
@@ -158,33 +169,25 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Checkout private release-set source
-        uses: actions/checkout@v6
-        with:
-          repository: ${{ secrets.RELEASE_SET_REPOSITORY }}
-          ssh-key: ${{ secrets.RELEASE_SET_READ_DEPLOY_KEY }}
-          path: release-set-repo
-          persist-credentials: false
-          submodules: 'false'
-
-      - name: Checkout public runtime source
+      - name: Checkout compilation source
         uses: actions/checkout@v6
         with:
           persist-credentials: false
           repository: ${{ secrets.SOURCE_REPOSITORY }}
           ref: ${{ needs.resolve-release-set.outputs.source_revision }}
           path: source
+          ssh-key: ${{ secrets.SOURCE_READ_DEPLOY_KEY }}
           submodules: 'false'
 
       - name: Verify pinned source revision
         env:
           EXPECTED_SOURCE_REVISION: ${{ needs.resolve-release-set.outputs.source_revision }}
         run: |
-          # Deviation 1b: identity binds the upstream LO core commit; the
+          # Deviation 1b: identity binds the resolved source revision; the
           # checkout must match it exactly before any compilation.
           SOURCE_CHECKOUT_SHA=$(git -C source rev-parse HEAD)
           [[ "$SOURCE_CHECKOUT_SHA" == "$EXPECTED_SOURCE_REVISION" ]] || {
-            echo "::error::Public source checkout differs from the resolved revision"
+            echo "::error::Source checkout differs from the resolved revision"
             exit 1
           }
 
@@ -199,7 +202,7 @@ jobs:
         run: |
           printf '%s\n' "$DISPATCH_MANIFEST" > release-set.json
           python3 build/release_set.py verify \
-            --repo-root release-set-repo \
+            --repo-root source \
             --source-revision "$SOURCE_REVISION" \
             --manifest release-set.json \
             --release-id "$RELEASE_ID" \
@@ -222,16 +225,6 @@ jobs:
           source ./emsdk_env.sh
           emcc --version
 
-      - name: Inject variant configs into source checkout
-        run: |
-          # build-wasm.sh resolves variants relative to the SOURCE checkout
-          # (build-wasm.sh:39), so the private release-set source's committed
-          # content is injected into it ephemerally BEFORE the heavy build
-          # and scrubbed with the payload (deviation 4). Sourced from the
-          # release-set-repo checkout — never from the seed-free builder tree
-          # — and never logged.
-          cp -r release-set-repo/variants source/variants
-
       - name: Build release target
         env:
           SOURCE_REVISION: ${{ needs.resolve-release-set.outputs.source_revision }}
@@ -246,7 +239,7 @@ jobs:
             exit 1
           }
           python3 build/release_set.py build \
-            --repo-root release-set-repo \
+            --repo-root source \
             --source-revision "$SOURCE_REVISION" \
             --release-id "$RELEASE_ID" \
             --target-id "$TARGET_ID" \

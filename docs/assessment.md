@@ -144,10 +144,12 @@ as part of the standard.
   distinct `target_id`s (dev, prod, prod), zero seed/domain values in the emitted
   manifest. The code is correct; the briefing's literal "run on the delivered
   tree" wording was the thing that presupposed a checkout.
-- AC11: `release-set.yml` — `max-parallelism: 1` (line 136), `BUILD_JOBS: "4"` (139),
-  `timeout-minutes: 350` (130), heavy build dispatch-only (gate line 127), forbidden-env
-  guard before `release_set.py build` (212–215), environment gate `Candidate Promotion` on
-  the promote job (511), per-target promote concurrency (517–518), `self-tests.yml`
+- AC11: `release-set.yml` — `max-parallelism: 1`, `BUILD_JOBS: "4"`,
+  `timeout-minutes: 350` in the `build` job, heavy build dispatch-only (release
+  guard excludes manual validation and failed builds), forbidden-env guard before
+  `release_set.py build`, environment gate `Candidate Build` on the build face
+  (`resolve-release-set` + `build`), environment gate `Candidate Promotion` on
+  the promote job, per-target promote concurrency, `self-tests.yml`
   lightweight only, no `.git` in the builder tree, no shipped `__pycache__`.
 - AC8 (cross-repo): the public repo's working tree carries the canonical
   variant configs only as untracked files (transient pre-migration state);

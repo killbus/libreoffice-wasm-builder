@@ -37,8 +37,8 @@ and must never depend on the builder's own Git history.
 ## Release-set source (opaque)
 
 The private release-set source — fetched by builder CI through its secret
-read-only deploy key (secret `RELEASE_SET_READ_DEPLOY_KEY`, repository
-`RELEASE_SET_REPOSITORY`) — is the only private input to the release set.
+read-only deploy key (secret `SOURCE_READ_DEPLOY_KEY`, repository
+`SOURCE_REPOSITORY`) — is the only private input to the release set.
 The builder treats it as an opaque secret-backed dependency: it reads that
 checkout's committed tree only through `release_set.py --repo-root` and does
 not document or expose anything about its contents. That content's contract is

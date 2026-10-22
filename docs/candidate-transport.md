@@ -24,21 +24,18 @@ Configure these values before enabling dispatched builds:
 | Build environment variable | `CANDIDATE_MATERIALIZATION_KEY_ID` | Public, non-secret identifier for the active recipient. |
 | Promotion environment variable | `CANDIDATE_MATERIALIZATION_KEY_IDS` | Comma- or whitespace-separated allowlist of supported key IDs. |
 | Promotion environment secret | `CANDIDATE_MATERIALIZATION_IDENTITIES` | One or more age identity lines used only while materializing accepted candidates. |
-| Repository secret | `SOURCE_REPOSITORY` | Public runtime repository in `owner/repository` form, used for the source checkout and the `release-dev` publication. |
-| Promotion environment secret | `SOURCE_RELEASE_DEPLOY_KEY` | Read/write deploy key for the public runtime repository, used only for the `release-dev` publication. |
-| Repository secret | `RELEASE_SET_REPOSITORY` | Private release-set source in `owner/repository` form; its committed content defines the release set and is fetched by the resolve and build jobs. |
-| Repository secret | `RELEASE_SET_READ_DEPLOY_KEY` | Read-only deploy key for the private release-set source, mounted only in the resolve and build jobs. |
+| Repository secret | `SOURCE_REPOSITORY` | The source repository (compilation + release-set) in `owner/repository` form; fetched by the resolve and build jobs via the read-only deploy key and used for the `release-dev` publication. |
+| Candidate Build environment secret | `SOURCE_READ_DEPLOY_KEY` | Read-only deploy key for the source repository, mounted only in the resolve and build jobs. |
+| Promotion environment secret | `SOURCE_RELEASE_DEPLOY_KEY` | Read/write deploy key for the source repository, used only for the `release-dev` publication. |
 
-`SOURCE_READ_DEPLOY_KEY` is only required if the source checkout can no longer
-use the default `GITHUB_TOKEN` access (for example, if the runtime repository
-moves to a restricted account). For a public source repository it is not
-expected.
+`SOURCE_READ_DEPLOY_KEY` is **required**: the source is fetched by CI through its
+read-only deploy key, never the default GITHUB_TOKEN.
 
 The dispatch payload supplies only public contract fields: source revision,
 release ID, target IDs, build roles, expected outputs, and transport profile.
 The builder must not accept `BUILD_VARIANT`, `PRODUCT_LOCK`, customer, domain,
-private variant IDs, or `target_seed`. `SOURCE_REPOSITORY` names the PUBLIC
-runtime repository and is trusted control-plane configuration, not provenance:
+private variant IDs, or `target_seed`. `SOURCE_REPOSITORY` names the source
+repository and is trusted control-plane configuration, not provenance:
 it must not appear in dispatch payloads, release-set manifests, candidate or
 accepted evidence, transport metadata, prepared package files, release notes,
 tags, branches, artifact names, or workflow logs. Do not replace it with a hash;
@@ -58,8 +55,10 @@ repository names are low-entropy identifiers.
 
 Never commit identities, place them in dispatch payloads, upload them as
 artifacts, or echo them in workflow logs. Keep source-checkout access and
-`release-dev` publication access separate: the deploy key is only mounted in the
-protected promotion job, never in the build job. The final `release-dev`
+`release-dev` publication access separate: the read-only key
+(`SOURCE_READ_DEPLOY_KEY`) is mounted only in the resolve and build jobs; the
+read/write key (`SOURCE_RELEASE_DEPLOY_KEY`) is mounted only in the protected
+promotion job, never in the build job. The final `release-dev`
 package is materialized plaintext for normal consumption, but it still contains
 no private material: authorized operators resolve opaque target IDs through `release_set.py inspect` (private operator data) against a private release-set source checkout instead of public metadata.
 
@@ -103,7 +102,7 @@ credentials. Materialized and prepared plaintext trees are removed in the final
 ## Publication Routing
 
 - The `dev` target publishes only to the fixed `release-dev` branch of the
-  public runtime repository (plus tag `v1.0.0-<source7>-dev`) over the
+  source repository (plus tag `v1.0.0-<source7>-dev`) over the
   `SOURCE_RELEASE_DEPLOY_KEY` and never creates a builder GitHub Release.
 - Every `prod` target publishes to `release/<target_id>` in this builder
   repository (plus tag `v1.0.0-<source7>.<target-hash64>`) with a GitHub

@@ -6,20 +6,22 @@ Anything not listed here is a faithful port (ported WHOLE, not trimmed).
 ## Deviation 1 — `release_set.py` lives in the BUILDER, not the source
 
 pdfium keeps `build/release_set.py` source-side because pdfium's source repo is
-private. LO's compilation source is the PUBLIC runtime repo, which must never
-commit variant seeds, so the script (adapted to LO's `lo-release-target-v1` /
+private. LO's compilation source is the source repository, fetched by builder
+CI via the read deploy key; the builder tree itself stays seed-free and never
+commits the release set, so the script (adapted to LO's `lo-release-target-v1` /
 `lo-release-set-v1` domain strings, `soffice.wasm` outputs, and the 6-key
-build-info shape) lives in the public builder and reads the private release-set
-source's committed tree through `--repo-root` (deviation 1b).
+build-info shape) lives in the public builder and reads the source
+repository's committed tree through `--repo-root` (deviation 1b).
 Same four commands (`manifest`, `verify`, `target`/`build`, `inspect`) and the
 same public/private split.
 
 ## Deviation 1b — variant resolution binds the release-set source's committed tree; `--source-revision` is identity-only
 
-LO runs a three-repository model: the public runtime source repo, the public
-seed-free builder, and a private release-set source whose committed content
-defines the release set. The builder CI fetches it via a read-only deploy key
-(`RELEASE_SET_REPOSITORY` / `RELEASE_SET_READ_DEPLOY_KEY`) and points
+LO runs a two-repository model: the source repository is BOTH the compilation
+source and the release-set source (its committed content defines the release
+set), and the public seed-free builder is the only other participant in the
+builder pipeline. The builder CI fetches the source repository via a read-only
+deploy key (`SOURCE_REPOSITORY` / `SOURCE_READ_DEPLOY_KEY`) and points
 `release_set.py` at that checkout with `--repo-root`. Variants are ALWAYS read
 from the release-set source's committed tree at the resolved ref (in CI the
 release-set source checkout is the pinned content), so release-set identity is
@@ -52,19 +54,20 @@ variant and is memory-hungry, so `release-set.yml` sets `strategy.max-parallel:
 with a 350-minute job timeout. The promote job stays lightweight (no
 emscripten). Rationale: OOM prevention outranks wall-clock.
 
-## Deviation 4 — public source checkout + private variant injection
+## Deviation 4 — single source checkout for compilation + release-set resolution
 
-The heavy build checks out the PUBLIC runtime repo at the pinned
-`source_revision` as the compilation source, then copies the private
-release-set source's committed release-set content into that checkout
-ephemerally (in a step BEFORE the heavy build, because `build-wasm.sh`
-resolves variant configs relative to the source checkout root). The injected files are scrubbed with the
-plaintext payload by the transport step's exit trap. Rationale: the public repo
-must never commit seeds (deviation 1), and the builder tree carries no private
-per-variant material (deviation 1b), but the source build script owns the
-wiring; injecting into the ephemeral checkout keeps both public faces seed-free
-while preserving the source-owned build path.
-`release_set.py build --repo-root <variant-checkout> --source-dir <checkout>`
+The heavy build checks out the source repository at the pinned `source_revision`
+as the compilation source, and that same checkout is used for BOTH compilation
+and release-set resolution (single source): the committed release-set already
+lives in the source checkout, so the build reads `variants/` from the same
+checkout it compiles (`--repo-root source` / `--source-dir source`) and there is
+no longer a separate injection of a distinct release-set checkout. The committed
+variants are scrubbed from the working tree by the transport step's exit trap.
+Rationale: the source checkout serves both faces of the release set while the
+builder tree carries no private per-variant material (deviation 1b), and the
+source build script owns the wiring; using the single checkout preserves the
+source-owned build path.
+`release_set.py build --repo-root <source-checkout> --source-dir <checkout>`
 enforces that the variant is resolved internally (caller passes only
 `--source-revision` / `--release-id` / `--target-id` / `--source-dir`; never
 `BUILD_VARIANT`/`PRODUCT_LOCK`/`BUILD_TYPE`).
