@@ -389,7 +389,7 @@ release_guard=$(sed -n '/^    if: >-$/,/^    runs-on:/p' "$RELEASE_WORKFLOW" | s
 [[ "$release_guard" == "\${{github.event.workflow_run.event=='repository_dispatch'&&github.event.workflow_run.conclusion=='success'}}" ]] || \
   fail "release guard must exclude manual validation and failed builds"
 promote_block=$(sed -n '/^  promote:$/,$p' "$RELEASE_WORKFLOW")
-build_face=$(sed -n '1,/^  promote:$/p' "$RELEASE_WORKFLOW")
+build_face=$(sed -n '1,/^  promote:$/p' "$BUILD_WORKFLOW")
 grep -Fxq '    needs: resolve-accepted-release' <<<"$promote_block" || \
   fail "promotion must depend on the release resolver"
 grep -q '^    if:' <<<"$promote_block" && \

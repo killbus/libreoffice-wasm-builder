@@ -120,8 +120,7 @@ jobs:
           SOURCE_REVISION: ${{ steps.contract.outputs.source_revision }}
           RELEASE_ID: ${{ steps.contract.outputs.release_id }}
         run: |
-          python3 build/release_set.py verify \
-            --repo-root source \
+          python3 build/release_set.py --repo-root source verify \
             --source-revision "$SOURCE_REVISION" \
             --manifest release-set.json \
             --release-id "$RELEASE_ID"
@@ -196,8 +195,7 @@ jobs:
           DISPATCH_MANIFEST: ${{ needs.resolve-release-set.outputs.manifest }}
         run: |
           printf '%s\n' "$DISPATCH_MANIFEST" > release-set.json
-          python3 build/release_set.py verify \
-            --repo-root source \
+          python3 build/release_set.py --repo-root source verify \
             --source-revision "$SOURCE_REVISION" \
             --manifest release-set.json \
             --release-id "$RELEASE_ID" \
@@ -233,8 +231,7 @@ jobs:
             echo "::error::Private build selectors are not accepted by this workflow"
             exit 1
           }
-          python3 build/release_set.py build \
-            --repo-root source \
+          python3 build/release_set.py --repo-root source build \
             --source-revision "$SOURCE_REVISION" \
             --release-id "$RELEASE_ID" \
             --target-id "$TARGET_ID" \
