@@ -157,7 +157,7 @@ jobs:
       # AC11: the heavy emscripten face is SERIAL by construction — one LO
       # compile at a time, ordered by target_id, never concurrent.
       max-parallel: 1
-    matrix: ${{ fromJSON(needs.resolve-release-set.outputs.targets) }}
+      matrix: ${{ fromJSON(needs.resolve-release-set.outputs.targets) }}
     env:
       BUILD_JOBS: "4"
       EMSDK_VERSION: "3.1.74"
