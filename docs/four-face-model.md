@@ -20,7 +20,7 @@ project was standardized on.
 | Release-source face | private release-set source + this builder repo | private per-variant release-set content — opaque here; origin-lock input contract + release-identity derivation in the builder | release-set source private; builder repo public |
 | Public delivery face | public runtime repo (`publish.yml` / `pages.yml` / `font-bundles.yml`) | unlocked `soffice.{wasm,js,cjs,data}` + 6-key `wasm/build-info.json` | open, structurally dev-role-only |
 | Per-consumer private delivery | this builder repo | locked per-target `soffice.wasm` via age `envelope-v1` transport | ciphertext in transit; delivered to per-recipient keys |
-| Heavy compile face | this builder repo CI (`release-set.yml`) | per-target serial emscripten builds (~350 min each) | CI-owned, RAM-limited |
+| Heavy compile face | this builder repo CI (release-set.yml build face / release.yml release face) | per-target serial emscripten builds (~350 min each) | CI-owned, RAM-limited |
 
 ## Roles and destinations
 

@@ -93,17 +93,18 @@ CI-native gate is the no-pthread runtime artifact contract
 `LokNoPthreadRuntimeContract.SingleProfileNoWorkerSidecar`. The evidence key
 shape (`focused_embedder_test {filter, status}`) is kept identical.
 
-## Deviation 7 — single merged workflow
+## Deviation 7 — two-face workflow split
 
-pdfium splits the pipeline into `build.yml` (dispatch face: resolve → build →
-accept) and `release.yml` (workflow_run face: resolve-accepted → promote). The
-LO builder merges both faces into one `release-set.yml` (resolve → serial
-build → accept → resolve-accepted-release → promote) plus a separate
-`self-tests.yml` (atomic tests only, never the heavy job). The promote test's
-structural assertions are scoped to the merged file's sections (build face =
-pre-`promote:`; release face = `promote:` job). Rationale: one workflow keeps
-the LO pipeline legible; the state machine and the security-relevant section
-scoping are unchanged.
+LO mirrors the pdfium split — `release-set.yml` (build face: dispatch-triggered
+resolve → serial build → accept; workflow name "LO WASM Build") + `release.yml`
+(release face: `workflow_run` listening to "LO WASM Build"; name "Promote
+Accepted LO WASM Builds"). The originally planned single merged file is
+infeasible: GitHub rejects a workflow that listens to its own `workflow_run`
+completion (422 "cannot listen to itself"), surfaced at dispatch parse time.
+The promote test's structural assertions are scoped to the two files (build
+face = release-set.yml in full; release face = release.yml). The state machine,
+the promotion guard (repository_dispatch-only), and the security-relevant
+section scoping are unchanged.
 
 ## Deviation 8 — `soffice.wasm` naming and LO provenance fields
 

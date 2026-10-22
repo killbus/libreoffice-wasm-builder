@@ -143,8 +143,8 @@ workflow_texts = {
     path.name: path.read_text(encoding="utf-8")
     for path in sorted(workflow_dir.glob("*.yml"))
 }
-if "release-set.yml" not in workflow_texts or "self-tests.yml" not in workflow_texts:
-    failures.append("workflows: release-set.yml and self-tests.yml must both exist")
+if not {"release-set.yml", "release.yml", "self-tests.yml"} <= set(workflow_texts):
+    failures.append("workflows: release-set.yml, release.yml and self-tests.yml must all exist")
 for name, text in workflow_texts.items():
     # The artifact name must be built from opaque run/target identities only.
     for match in re.finditer(r"^\s*-?\s*name:\s*(lo-wasm-candidate[^\n]*)$", text, re.MULTILINE):

@@ -93,10 +93,12 @@ as part of the standard.
    the upstream release asset.
 6. (Build-info contract LO renames: `lo_source_sha`, `soffice.wasm`,
    `lo-wasm-candidate-*` artifact names.)
-7. Single merged `release-set.yml` (pdfium splits build.yml / release.yml); the
-   `workflow_run` trigger drives the lightweight promote face off a successful
-   `repository_dispatch` parent run; the heavy build is gated off it; no push trigger.
-8. (Structural scoping of the promote self-test for the merged workflow.)
+7. Two workflow files (release-set.yml build face + release.yml release face),
+   matching the pdfium split — the merged-file plan is infeasible (GitHub: a
+   workflow cannot listen to its own workflow_run); the `workflow_run` trigger
+   drives the lightweight promote face off a successful `repository_dispatch`
+   parent run; the heavy build is gated off it; no push trigger.
+8. (Structural scoping of the promote self-test across the two workflow files.)
 
 ## 4. What "standard" buys
 

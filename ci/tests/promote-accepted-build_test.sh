@@ -17,7 +17,7 @@ readonly PROD_TARGET_A="target-v1-$(printf 'a%.0s' {1..64})"
 readonly PROD_TARGET_B="target-v1-$(printf 'b%.0s' {1..64})"
 readonly DEV_TARGET="target-v1-$(printf 'c%.0s' {1..64})"
 readonly BUILD_WORKFLOW="$TEST_DIR/../../.github/workflows/release-set.yml"
-readonly RELEASE_WORKFLOW="$TEST_DIR/../../.github/workflows/release-set.yml"
+readonly RELEASE_WORKFLOW="$TEST_DIR/../../.github/workflows/release.yml"
 
 cleanup() {
   rm -rf "$WORK_DIR"
@@ -378,11 +378,13 @@ assert_role_mismatch_fails() {
   fi
 }
 
-# LO adaptation: pdfium split the pipeline across build.yml (dispatch face) and
-# release.yml (workflow_run face). The LO builder merges both into a single
-# release-set.yml, so the structural checks are scoped to sections of the merged
-# file: the build face is everything before the `promote:` job; the release face
-# is the `promote:` job.
+# Two-file pipeline: release-set.yml is the build face
+# (dispatch-triggered: resolve → serial build → accept) and release.yml is
+# the release face (workflow_run-triggered: resolve-accepted → promote).
+# A single merged file is infeasible — GitHub rejects a workflow that
+# listens to its own workflow_run completion. Structural checks: the build
+# face is release-set.yml in full (it contains no promote job); the release
+# face is release.yml (its release guard + the promote: job).
 release_guard=$(sed -n '/^    if: >-$/,/^    runs-on:/p' "$RELEASE_WORKFLOW" | sed '1d;$d' | tr -d '[:space:]')
 [[ "$release_guard" == "\${{github.event.workflow_run.event=='repository_dispatch'&&github.event.workflow_run.conclusion=='success'}}" ]] || \
   fail "release guard must exclude manual validation and failed builds"
