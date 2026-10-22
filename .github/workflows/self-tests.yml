@@ -1,0 +1,32 @@
+name: LO WASM Builder Self-Tests
+
+# Atomic self-tests only: bash -n over every ci/*.sh, then ci/tests/*_test.sh.
+# No emscripten, no heavy job, no git push — this is the RAM-safe local face of
+# the builder CI. The heavy emscripten face lives exclusively in release-set.yml.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    name: Atomic CI self-tests
+
+    steps:
+      - name: Checkout builder repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run atomic self-tests
+        run: bash ci/run-tests.sh
