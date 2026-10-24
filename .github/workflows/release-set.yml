@@ -264,14 +264,14 @@ jobs:
           }
           trap cleanup_plaintext EXIT
 
-          mkdir -p candidate-payload
+          mkdir -p candidate-payload/dist
 
           SOURCE_BUILD_INFO=source/wasm/build-info.json
           [[ -f "$SOURCE_BUILD_INFO" ]] || {
             echo "::error::Source build-info was not emitted by the heavy build"
             exit 1
           }
-          cp source/wasm/soffice.wasm candidate-payload/
+          cp source/wasm/soffice.wasm candidate-payload/dist/
           cp source/README.md candidate-payload/ 2>/dev/null || printf 'LO WASM conversion runtime candidate payload.\n' > candidate-payload/README.md
 
           # Static package face for the candidate payload.
