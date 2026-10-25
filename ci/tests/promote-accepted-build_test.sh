@@ -71,7 +71,6 @@ printf '\n' >>"$MOCK_LOG"
 if [[ "${1:-}" == "api" ]]; then
   printf '%s %s\n' "$MOCK_RUN_ID" "$MOCK_RUN_ATTEMPT"
 elif [[ "${1:-}" == "release" && "${2:-}" == "create" ]]; then
-  cat >/dev/null
   [[ "${MOCK_FAIL_RELEASE_CREATE:-0}" != "1" ]] || exit 42
 fi
 EOF
@@ -164,6 +163,7 @@ run_promotion() {
 
     PATH="$MOCK_BIN:$PATH" \
       GH_TOKEN="test-token" \
+      SOURCE_RELEASE_TOKEN="source-test-token" \
       MOCK_TARGET="$target_id" \
       MOCK_BRANCH="$branch_name" \
       MOCK_LOG="$log_file" \
@@ -219,7 +219,7 @@ assert_publication_retry_succeeds() {
         --repository owner/builder
 
     if env "$failure_env" \
-      PATH="$MOCK_BIN:$PATH" GH_TOKEN="test-token" \
+      PATH="$MOCK_BIN:$PATH" GH_TOKEN="test-token" SOURCE_RELEASE_TOKEN="source-test-token" \
       MOCK_TARGET="retry-$failure_mode" MOCK_BRANCH="$branch_name" \
       MOCK_LOG="$case_dir/commands.log" \
       MOCK_RUN_ATTEMPT="$RUN_ATTEMPT" MOCK_RUN_ID="$RUN_ID" \
@@ -239,7 +239,7 @@ assert_publication_retry_succeeds() {
 
     [[ -d prepared ]] || fail "$failure_mode publication failure removed retry state"
 
-    PATH="$MOCK_BIN:$PATH" GH_TOKEN="test-token" \
+    PATH="$MOCK_BIN:$PATH" GH_TOKEN="test-token" SOURCE_RELEASE_TOKEN="source-test-token" \
       MOCK_TARGET="retry-$failure_mode" MOCK_BRANCH="$branch_name" \
       MOCK_LOG="$case_dir/commands.log" \
       MOCK_RUN_ATTEMPT="$RUN_ATTEMPT" MOCK_RUN_ID="$RUN_ID" \
@@ -441,6 +441,7 @@ readonly DEV_TREE="$SNAPSHOT_DIR/$DEV_TARGET/."
 readonly PROD_A_LOG="$WORK_DIR/$PROD_TARGET_A/commands.log"
 readonly PROD_B_LOG="$WORK_DIR/$PROD_TARGET_B/commands.log"
 readonly DEV_LOG="$WORK_DIR/$DEV_TARGET/commands.log"
+readonly DEV_ABS_TREE="$(cd "$WORK_DIR/$DEV_TARGET" && pwd)/prepared"
 readonly PROD_A_DIGEST="${PROD_TARGET_A#target-v1-}"
 readonly PROD_B_DIGEST="${PROD_TARGET_B#target-v1-}"
 readonly PROD_A_VERSION="1.0.0-1111111.$PROD_A_DIGEST"
@@ -464,6 +465,10 @@ assert_log_contains "$PROD_A_LOG" "git <push> <--force> <origin> <release/$PROD_
 assert_log_contains "$PROD_A_LOG" "git <push> <--force> <origin> <v$PROD_A_VERSION>"
 assert_log_contains "$PROD_A_LOG" "gh <release> <delete> <v$PROD_A_VERSION> <--repo> <owner/builder> <-y>"
 assert_log_contains "$PROD_A_LOG" "gh <release> <create> <v$PROD_A_VERSION> <--repo> <owner/builder>"
+assert_log_contains "$PROD_A_LOG" "<--files> <$WORK_DIR/$PROD_TARGET_A/prepared/dist/soffice.wasm>"
+[[ -f "$PROD_A_TREE/.gitignore" ]] || fail "production prepared tree is missing .gitignore"
+grep -Fxq 'dist/soffice.wasm' "$PROD_A_TREE/.gitignore" || \
+  fail "production .gitignore does not exclude the wasm from the git tree"
 
 grep -Fx 'builder readme' "$PROD_B_TREE/README.md" >/dev/null || \
   fail "second production release did not retain the builder README"
@@ -488,8 +493,11 @@ assert_log_contains "$DEV_LOG" 'gh <api> <repos/owner/builder/actions/workflows/
 assert_log_contains "$DEV_LOG" 'git <remote> <add> <origin> <git@github.com:owner/source.git>'
 assert_log_contains "$DEV_LOG" 'git <push> <--force> <origin> <release-dev>'
 assert_log_contains "$DEV_LOG" 'git <push> <--force> <origin> <v1.0.0-1111111-dev>'
-grep -F 'gh <release>' "$DEV_LOG" >/dev/null && \
-  fail "development promotion must not publish a GitHub Release"
+assert_log_contains "$DEV_LOG" "gh <release> <create> <v1.0.0-1111111-dev> <--repo> <owner/source>"
+assert_log_contains "$DEV_LOG" "<--files> <$DEV_ABS_TREE/dist/soffice.wasm>"
+[[ -f "$DEV_TREE/.gitignore" ]] || fail "development prepared tree is missing .gitignore"
+grep -Fxq 'dist/soffice.wasm' "$DEV_TREE/.gitignore" || \
+  fail "development .gitignore does not exclude the wasm from the git tree"
 
 for public_path in "$PROD_A_TREE" "$PROD_B_TREE" "$DEV_TREE"; do
   ! grep -R -F 'owner/source' "$public_path" >/dev/null ||

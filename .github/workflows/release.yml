@@ -317,6 +317,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SOURCE_REPOSITORY: ${{ secrets.SOURCE_REPOSITORY }}
+          SOURCE_RELEASE_TOKEN: ${{ secrets.SOURCE_RELEASE_TOKEN }}
         run: |
           bash ci/promote-accepted-build.sh publish \
             --release-dir "$RUNNER_TEMP/prepared/$TARGET_ID" \

@@ -34,6 +34,11 @@ Publish options:
 
 Environment for publish:
   GH_TOKEN                       GitHub token used by gh and production push.
+  SOURCE_RELEASE_TOKEN           GitHub token with contents:write on the private
+                                 source repository. Required only for dev
+                                 publication (used to publish the wasm release
+                                 asset there); the builder GH_TOKEN has no rights
+                                 on the source repository.
 EOF
 }
 
@@ -132,6 +137,10 @@ assemble_release_tree() {
     fail "candidate payload contains reserved Git metadata"
 
   cp -r "$ARTIFACT_DIR/dist" "$RELEASE_TEMP/"
+  require_file "candidate wasm" "$RELEASE_TEMP/dist/soffice.wasm"
+  # Keep the wasm on disk (publish uploads it as a release asset) but exclude it
+  # from the committed tree — GitHub rejects blobs > 100 MB.
+  printf 'dist/soffice.wasm\n' > "$RELEASE_TEMP/.gitignore"
   cp "$ARTIFACT_DIR/package.json" "$RELEASE_TEMP/"
   cp "$ACCEPTED_MANIFEST" "$RELEASE_TEMP/dist/build-info.json"
 
@@ -230,29 +239,53 @@ push_release_refs() {
   )
 }
 
-publish_production_release() {
-  [[ "$BUILD_ROLE" == "prod" ]] || return 0
+publish_release_asset() {
+  local target_repo title notes_text wasm_sha256 notes_file
+  if [[ "$BUILD_ROLE" == "prod" ]]; then
+    target_repo="$REPOSITORY"
+    title="$TITLE"
+    notes_text="This is an automated LibreOffice WASM build for an opaque production target."
+  else
+    target_repo="$SOURCE_REPOSITORY"
+    title="LO WASM ${VERSION} (Development Build)"
+    notes_text="This is an automated LibreOffice WASM development build for a private source target."
+  fi
 
-  gh release delete "$TAG_NAME" --repo "$REPOSITORY" -y || true
+  wasm_sha256="$(sha256sum "$RELEASE_DIR/dist/soffice.wasm" | cut -d' ' -f1)"
 
-  gh release create "$TAG_NAME" \
-    --repo "$REPOSITORY" \
-    --title "$TITLE" \
-    --notes-file - <<EOF
-# LO WASM Build
+  notes_file="$(mktemp)"
+  {
+    printf '# LO WASM Build\n\n'
+    printf '%s\n\n' "$notes_text"
+    printf -- '- **Version**: %s\n' "$VERSION"
+    printf -- '- **Release ID**: %s\n' "$RELEASE_ID"
+    printf -- '- **Target ID**: %s\n' "$TARGET_ID"
+    printf -- '- **Build Role**: %s\n' "$BUILD_ROLE"
+    printf -- '- **Builder Commit**: %s\n' "$BUILDER_SHA"
+    printf -- '- **Source Commit**: %s\n' "$SOURCE_REVISION"
+    printf -- '- **LO Source Commit**: %s\n' "$LO_SOURCE_SHA"
+    printf -- '- **Focused Native Test**: %s (%s)\n' "$FOCUSED_TEST_FILTER" "$FOCUSED_TEST_STATUS"
+    printf -- '- **Timestamp**: %s\n' "$BUILD_TIMESTAMP"
+    printf -- '- **WASM SHA-256**: %s\n' "$wasm_sha256"
+  } >"$notes_file"
 
-This is an automated LibreOffice WASM build for an opaque production target.
+  if [[ "$BUILD_ROLE" == "dev" ]]; then
+    GH_TOKEN="$SOURCE_RELEASE_TOKEN" gh release delete "$TAG_NAME" --repo "$target_repo" -y || true
+    GH_TOKEN="$SOURCE_RELEASE_TOKEN" gh release create "$TAG_NAME" \
+      --repo "$target_repo" \
+      --title "$title" \
+      --notes-file "$notes_file" \
+      --files "$RELEASE_DIR/dist/soffice.wasm"
+  else
+    gh release delete "$TAG_NAME" --repo "$target_repo" -y || true
+    gh release create "$TAG_NAME" \
+      --repo "$target_repo" \
+      --title "$title" \
+      --notes-file "$notes_file" \
+      --files "$RELEASE_DIR/dist/soffice.wasm"
+  fi
 
-- **Version**: $VERSION
-- **Release ID**: $RELEASE_ID
-- **Target ID**: $TARGET_ID
-- **Build Role**: $BUILD_ROLE
-- **Builder Commit**: $BUILDER_SHA
-- **Source Commit**: $SOURCE_REVISION
-- **LO Source Commit**: $LO_SOURCE_SHA
-- **Focused Native Test**: $FOCUSED_TEST_FILTER ($FOCUSED_TEST_STATUS)
-- **Timestamp**: $BUILD_TIMESTAMP
-EOF
+  rm -f "$notes_file"
 }
 
 cleanup_prepare() {
@@ -321,6 +354,7 @@ publish_release() {
   if [[ "$BUILD_ROLE" == "dev" ]]; then
     SOURCE_REPOSITORY="$(required_option source-repository)"
     require_repository "source repository" "$SOURCE_REPOSITORY"
+    [[ -n "${SOURCE_RELEASE_TOKEN:-}" ]] || fail "SOURCE_RELEASE_TOKEN is required for dev publication"
   else
     [[ -z "$SOURCE_REPOSITORY" ]] || fail "--source-repository is valid only for dev publication"
   fi
@@ -330,7 +364,7 @@ publish_release() {
   ACCEPTED_MANIFEST="$(cd "$(dirname "$ACCEPTED_MANIFEST")" && pwd)/$(basename "$ACCEPTED_MANIFEST")"
 
   local command
-  for command in cmp gh git jq; do
+  for command in cmp cut gh git jq sha256sum; do
     require_command "$command"
   done
 
@@ -340,7 +374,7 @@ publish_release() {
   select_release_remote
   assert_latest_successful_run
   push_release_refs
-  publish_production_release
+  publish_release_asset
 }
 
 main() {

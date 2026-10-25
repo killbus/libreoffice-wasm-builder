@@ -45,7 +45,7 @@ set -euo pipefail
 if [[ "${1:-}" == "api" ]]; then
   printf '%s %s\n' "$MOCK_RUN_ID" "$MOCK_RUN_ATTEMPT"
 elif [[ "${1:-}" == "release" && "${2:-}" == "create" ]]; then
-  cat >/dev/null
+  :
 fi
 EOF
 
@@ -161,7 +161,7 @@ fi
 prepare_release "$WORK_DIR/dev" "$DEV_TARGET" dev "release-dev"
 (
   cd "$WORK_DIR/dev"
-  env PATH="$MOCK_BIN:$PATH" GH_TOKEN="test-token" SSH_AUTH_SOCK="/nonexistent" \
+  env PATH="$MOCK_BIN:$PATH" GH_TOKEN="test-token" SOURCE_RELEASE_TOKEN="source-test-token" SSH_AUTH_SOCK="/nonexistent" \
     MOCK_BRANCH="release-dev" \
     MOCK_RUN_ID="$RUN_ID" MOCK_RUN_ATTEMPT="$RUN_ATTEMPT" \
     "$PROMOTION" publish \
