@@ -318,7 +318,7 @@ create_candidate() {
     if [[ "$output_name" == "build-info.json" ]]; then
       require_file "declared candidate output '$output_name'" "$payload_dir/$output_name"
     else
-      require_file "declared candidate output '$output_name'" "$payload_dir/dist/$output_name"
+      require_file "declared candidate output '$output_name'" "$payload_dir/wasm/$output_name"
     fi
   done < <(jq -r '.outputs[]' <<<"$target_json")
   validate_candidate_shape "$output"

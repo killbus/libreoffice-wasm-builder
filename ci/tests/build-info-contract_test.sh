@@ -130,7 +130,7 @@ common_identity_args=(
   --workflow-run-attempt "$RUN_ATTEMPT"
 )
 
-# Candidate evidence stays at the payload root; declared package files live under dist/.
+# Candidate evidence stays at the payload root; declared package files live under wasm/.
 create_target_evidence() {
   local target_id="$1"
   local role artifact_id payload_dir candidate transport_dir artifact_name
@@ -141,8 +141,8 @@ create_target_evidence() {
   transport_dir="$WORK_DIR/transports/$target_id"
   artifact_name="lo-wasm-candidate-$RUN_ID-$RUN_ATTEMPT-$target_id"
 
-  mkdir -p "$payload_dir/dist" "$(dirname "$candidate")" "$WORK_DIR/evidence"
-  printf 'wasm for %s\n' "$target_id" >"$payload_dir/dist/soffice.wasm"
+  mkdir -p "$payload_dir/wasm" "$(dirname "$candidate")" "$WORK_DIR/evidence"
+  printf 'wasm for %s\n' "$target_id" >"$payload_dir/wasm/soffice.wasm"
   jq -S -n \
     --argjson schema_version "$CONTRACT_VERSION" \
     --arg release_id "$RELEASE_ID" \

@@ -131,18 +131,20 @@ select_release_identity() {
 assemble_release_tree() {
   RELEASE_TEMP="$(mktemp -d "$RELEASE_OUTPUT_PARENT/.candidate-release.XXXXXX")"
   require_directory "candidate distribution" "$ARTIFACT_DIR/dist"
+  require_directory "candidate wasm" "$ARTIFACT_DIR/wasm"
   require_file "candidate package" "$ARTIFACT_DIR/package.json"
   require_file "candidate README" "$ARTIFACT_DIR/README.md"
   [[ -z "$(find "$ARTIFACT_DIR" -name .git -print -quit)" ]] || \
     fail "candidate payload contains reserved Git metadata"
 
   cp -r "$ARTIFACT_DIR/dist" "$RELEASE_TEMP/"
-  require_file "candidate wasm" "$RELEASE_TEMP/dist/soffice.wasm"
-  # Keep the wasm on disk (publish uploads it as a release asset) but exclude it
-  # from the committed tree — GitHub rejects blobs > 100 MB.
-  printf 'dist/soffice.wasm\n' > "$RELEASE_TEMP/.gitignore"
+  cp -r "$ARTIFACT_DIR/wasm" "$RELEASE_TEMP/"
+  require_file "candidate wasm" "$RELEASE_TEMP/wasm/soffice.wasm"
+  # Keep the big native binaries on disk (publish zips them into the release
+  # asset) but exclude them from the committed tree — GitHub rejects blobs > 100 MB.
+  printf 'wasm/soffice.wasm\nwasm/soffice.data\nwasm/soffice.data.js.metadata\n' > "$RELEASE_TEMP/.gitignore"
   cp "$ARTIFACT_DIR/package.json" "$RELEASE_TEMP/"
-  cp "$ACCEPTED_MANIFEST" "$RELEASE_TEMP/dist/build-info.json"
+  cp "$ACCEPTED_MANIFEST" "$RELEASE_TEMP/wasm/build-info.json"
 
   if [[ "$BUILD_ROLE" == "prod" ]]; then
     cp README.md "$RELEASE_TEMP/README.md"
@@ -156,14 +158,16 @@ rewrite_release_package() {
     --arg version "$VERSION" \
     --arg build_role "$BUILD_ROLE" \
     --arg repository "$REPOSITORY" \
-    '.version = $version |
-     if $build_role == "prod" then
-       .repository.url = ("https://github.com/" + $repository) |
-       .homepage = ("https://github.com/" + $repository + "#readme") |
-       .bugs.url = ("https://github.com/" + $repository + "/issues")
-     else
-       .description += " (Development Build)"
-     end' \
+    '.version = $version
+     | (if has("scripts") then .scripts |= del(.prepack) else . end)
+     | ((.files // []) as $f | .files = (($f + ["wasm/build-info.json"]) | unique))
+     | if $build_role == "prod" then
+         .repository.url = ("https://github.com/" + $repository) |
+         .homepage = ("https://github.com/" + $repository + "#readme") |
+         .bugs.url = ("https://github.com/" + $repository + "/issues")
+       else
+         .description += " (Development Build)"
+       end' \
     "$RELEASE_TEMP/package.json" >"$RELEASE_TEMP/package.json.tmp"
   mv "$RELEASE_TEMP/package.json.tmp" "$RELEASE_TEMP/package.json"
 }
@@ -193,8 +197,8 @@ EOF
 
 validate_prepared_release() {
   require_file "prepared package" "$RELEASE_DIR/package.json"
-  require_file "prepared build-info" "$RELEASE_DIR/dist/build-info.json"
-  cmp -s "$ACCEPTED_MANIFEST" "$RELEASE_DIR/dist/build-info.json" || \
+  require_file "prepared build-info" "$RELEASE_DIR/wasm/build-info.json"
+  cmp -s "$ACCEPTED_MANIFEST" "$RELEASE_DIR/wasm/build-info.json" || \
     fail "prepared build-info differs from accepted evidence"
   [[ "$(jq -er '.version' "$RELEASE_DIR/package.json")" == "$VERSION" ]] || \
     fail "prepared package version does not match release identity"
@@ -240,7 +244,7 @@ push_release_refs() {
 }
 
 publish_release_asset() {
-  local target_repo title notes_text wasm_sha256 notes_file
+  local target_repo title notes_text wasm_sha256 zip_path zip_sha256 notes_file
   if [[ "$BUILD_ROLE" == "prod" ]]; then
     target_repo="$REPOSITORY"
     title="$TITLE"
@@ -251,7 +255,10 @@ publish_release_asset() {
     notes_text="This is an automated LibreOffice WASM development build for a private source target."
   fi
 
-  wasm_sha256="$(sha256sum "$RELEASE_DIR/dist/soffice.wasm" | cut -d' ' -f1)"
+  wasm_sha256="$(sha256sum "$RELEASE_DIR/wasm/soffice.wasm" | cut -d' ' -f1)"
+  zip_path="${RELEASE_DIR}.zip"
+  (cd "$RELEASE_DIR" && zip -qry "$zip_path" . -x '.git/*' -x '.gitignore')
+  zip_sha256="$(sha256sum "$zip_path" | cut -d' ' -f1)"
 
   notes_file="$(mktemp)"
   {
@@ -267,6 +274,7 @@ publish_release_asset() {
     printf -- '- **Focused Native Test**: %s (%s)\n' "$FOCUSED_TEST_FILTER" "$FOCUSED_TEST_STATUS"
     printf -- '- **Timestamp**: %s\n' "$BUILD_TIMESTAMP"
     printf -- '- **WASM SHA-256**: %s\n' "$wasm_sha256"
+    printf -- '- **ZIP SHA-256**: %s\n' "$zip_sha256"
   } >"$notes_file"
 
   if [[ "$BUILD_ROLE" == "dev" ]]; then
@@ -275,17 +283,18 @@ publish_release_asset() {
       --repo "$target_repo" \
       --title "$title" \
       --notes-file "$notes_file" \
-      --files "$RELEASE_DIR/dist/soffice.wasm"
+      "$zip_path"
   else
     gh release delete "$TAG_NAME" --repo "$target_repo" -y || true
     gh release create "$TAG_NAME" \
       --repo "$target_repo" \
       --title "$title" \
       --notes-file "$notes_file" \
-      --files "$RELEASE_DIR/dist/soffice.wasm"
+      "$zip_path"
   fi
 
   rm -f "$notes_file"
+  rm -f "$zip_path"
 }
 
 cleanup_prepare() {
@@ -364,7 +373,7 @@ publish_release() {
   ACCEPTED_MANIFEST="$(cd "$(dirname "$ACCEPTED_MANIFEST")" && pwd)/$(basename "$ACCEPTED_MANIFEST")"
 
   local command
-  for command in cmp cut gh git jq sha256sum; do
+  for command in cmp cut gh git jq sha256sum zip; do
     require_command "$command"
   done
 

@@ -75,15 +75,32 @@ elif [[ "${1:-}" == "release" && "${2:-}" == "create" ]]; then
 fi
 EOF
 
-  chmod +x "$MOCK_BIN/git" "$MOCK_BIN/gh"
+  cat >"$MOCK_BIN/zip" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+for arg in "$@"; do
+  case "$arg" in
+    -*) ;;
+    .) ;;
+    *) : > "$arg"; break ;;
+  esac
+done
+exit 0
+EOF
+
+  chmod +x "$MOCK_BIN/git" "$MOCK_BIN/gh" "$MOCK_BIN/zip"
 }
 
 create_candidate_payload() {
   local output_dir="$1"
-  mkdir -p "$output_dir/dist"
+  mkdir -p "$output_dir/wasm" "$output_dir/dist"
   printf 'candidate readme\n' >"$output_dir/README.md"
-  printf 'wasm\n' >"$output_dir/dist/soffice.wasm"
-  printf 'esm\n' >"$output_dir/dist/index.js"
+  printf 'wasm\n' >"$output_dir/wasm/soffice.wasm"
+  printf 'cjs glue\n' >"$output_dir/wasm/soffice.cjs"
+  printf 'js glue\n' >"$output_dir/wasm/soffice.js"
+  printf 'data\n' >"$output_dir/wasm/soffice.data"
+  printf 'loader\n' >"$output_dir/wasm/loader.cjs"
+  printf 'esm\n' >"$output_dir/dist/browser.js"
   printf 'cjs\n' >"$output_dir/dist/index.cjs"
   cat >"$output_dir/package.json" <<'EOF'
 {
@@ -92,7 +109,9 @@ create_candidate_payload() {
   "description": "LO WASM",
   "repository": { "url": "https://example.invalid/source" },
   "homepage": "https://example.invalid",
-  "bugs": { "url": "https://example.invalid/issues" }
+  "bugs": { "url": "https://example.invalid/issues" },
+  "files": [ "dist", "README.md" ],
+  "scripts": { "prepack": "node scripts/build-package.mjs --silent" }
 }
 EOF
 }
@@ -454,9 +473,11 @@ jq -e \
    .homepage == "https://github.com/owner/builder#readme" and
    .bugs.url == "https://github.com/owner/builder/issues"' \
   "$PROD_A_TREE/package.json" >/dev/null
+jq -e '.scripts.prepack == null' "$PROD_A_TREE/package.json" >/dev/null
+jq -e '(.files | index("wasm/build-info.json")) != null' "$PROD_A_TREE/package.json" >/dev/null
 jq -e --arg target_id "$PROD_TARGET_A" \
   '.artifact_status == "accepted" and .build_role == "prod" and .target_id == $target_id' \
-  "$PROD_A_TREE/dist/build-info.json" >/dev/null
+  "$PROD_A_TREE/wasm/build-info.json" >/dev/null
 grep -Fx 'builder readme' "$PROD_A_TREE/README.md" >/dev/null || \
   fail "production release did not retain the builder README"
 assert_log_contains "$PROD_A_LOG" 'gh <api> <repos/owner/builder/actions/workflows/12345/runs?branch=main&event=repository_dispatch&status=success&per_page=1>'
@@ -465,9 +486,9 @@ assert_log_contains "$PROD_A_LOG" "git <push> <--force> <origin> <release/$PROD_
 assert_log_contains "$PROD_A_LOG" "git <push> <--force> <origin> <v$PROD_A_VERSION>"
 assert_log_contains "$PROD_A_LOG" "gh <release> <delete> <v$PROD_A_VERSION> <--repo> <owner/builder> <-y>"
 assert_log_contains "$PROD_A_LOG" "gh <release> <create> <v$PROD_A_VERSION> <--repo> <owner/builder>"
-assert_log_contains "$PROD_A_LOG" "<--files> <$WORK_DIR/$PROD_TARGET_A/prepared/dist/soffice.wasm>"
+assert_log_contains "$PROD_A_LOG" "<$WORK_DIR/$PROD_TARGET_A/prepared.zip>"
 [[ -f "$PROD_A_TREE/.gitignore" ]] || fail "production prepared tree is missing .gitignore"
-grep -Fxq 'dist/soffice.wasm' "$PROD_A_TREE/.gitignore" || \
+grep -Fxq 'wasm/soffice.wasm' "$PROD_A_TREE/.gitignore" || \
   fail "production .gitignore does not exclude the wasm from the git tree"
 
 grep -Fx 'builder readme' "$PROD_B_TREE/README.md" >/dev/null || \
@@ -484,9 +505,11 @@ jq -e \
   '.version == "1.0.0-1111111-dev" and
    .description == "LO WASM (Development Build)"' \
   "$DEV_TREE/package.json" >/dev/null
+jq -e '.scripts.prepack == null' "$DEV_TREE/package.json" >/dev/null
+jq -e '(.files | index("wasm/build-info.json")) != null' "$DEV_TREE/package.json" >/dev/null
 jq -e --arg target_id "$DEV_TARGET" \
   '.artifact_status == "accepted" and .build_role == "dev" and .target_id == $target_id' \
-  "$DEV_TREE/dist/build-info.json" >/dev/null
+  "$DEV_TREE/wasm/build-info.json" >/dev/null
 grep -Fx 'candidate readme' "$DEV_TREE/README.md" >/dev/null || \
   fail "development release did not retain the candidate README"
 assert_log_contains "$DEV_LOG" 'gh <api> <repos/owner/builder/actions/workflows/12345/runs?branch=main&event=repository_dispatch&status=success&per_page=1>'
@@ -494,9 +517,9 @@ assert_log_contains "$DEV_LOG" 'git <remote> <add> <origin> <git@github.com:owne
 assert_log_contains "$DEV_LOG" 'git <push> <--force> <origin> <release-dev>'
 assert_log_contains "$DEV_LOG" 'git <push> <--force> <origin> <v1.0.0-1111111-dev>'
 assert_log_contains "$DEV_LOG" "gh <release> <create> <v1.0.0-1111111-dev> <--repo> <owner/source>"
-assert_log_contains "$DEV_LOG" "<--files> <$DEV_ABS_TREE/dist/soffice.wasm>"
+assert_log_contains "$DEV_LOG" "<$DEV_ABS_TREE.zip>"
 [[ -f "$DEV_TREE/.gitignore" ]] || fail "development prepared tree is missing .gitignore"
-grep -Fxq 'dist/soffice.wasm' "$DEV_TREE/.gitignore" || \
+grep -Fxq 'wasm/soffice.wasm' "$DEV_TREE/.gitignore" || \
   fail "development .gitignore does not exclude the wasm from the git tree"
 
 for public_path in "$PROD_A_TREE" "$PROD_B_TREE" "$DEV_TREE"; do

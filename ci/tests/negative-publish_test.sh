@@ -49,14 +49,32 @@ elif [[ "${1:-}" == "release" && "${2:-}" == "create" ]]; then
 fi
 EOF
 
-  chmod +x "$MOCK_BIN/git" "$MOCK_BIN/gh"
+  cat >"$MOCK_BIN/zip" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+for arg in "$@"; do
+  case "$arg" in
+    -*) ;;
+    .) ;;
+    *) : > "$arg"; break ;;
+  esac
+done
+exit 0
+EOF
+
+  chmod +x "$MOCK_BIN/git" "$MOCK_BIN/gh" "$MOCK_BIN/zip"
 }
 
 create_payload() {
   local output_dir="$1" target_id="$2" build_role="$3"
-  mkdir -p "$output_dir/dist"
+  mkdir -p "$output_dir/wasm" "$output_dir/dist"
   printf 'candidate readme\n' >"$output_dir/README.md"
-  printf 'wasm\n' >"$output_dir/dist/soffice.wasm"
+  printf 'wasm\n' >"$output_dir/wasm/soffice.wasm"
+  printf 'cjs glue\n' >"$output_dir/wasm/soffice.cjs"
+  printf 'js glue\n' >"$output_dir/wasm/soffice.js"
+  printf 'data\n' >"$output_dir/wasm/soffice.data"
+  printf 'loader\n' >"$output_dir/wasm/loader.cjs"
+  printf 'esm\n' >"$output_dir/dist/browser.js"
   cat >"$output_dir/package.json" <<'EOF'
 {
   "name": "lo-wasm",
@@ -64,7 +82,9 @@ create_payload() {
   "description": "LO WASM",
   "repository": { "url": "https://example.invalid/source" },
   "homepage": "https://example.invalid",
-  "bugs": { "url": "https://example.invalid/issues" }
+  "bugs": { "url": "https://example.invalid/issues" },
+  "files": [ "dist", "README.md" ],
+  "scripts": { "prepack": "node scripts/build-package.mjs --silent" }
 }
 EOF
   # Accepted manifest in the promote script's accepted shape.

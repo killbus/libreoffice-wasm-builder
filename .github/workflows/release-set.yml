@@ -209,6 +209,16 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Build JS wrapper bundles
+        run: |
+          cd source
+          npm ci --ignore-scripts --no-audit --no-fund
+          node scripts/build-js-bundles.mjs
+          [[ -f dist/browser.js && -f dist/browser.d.ts && -f dist/browser.worker.global.js ]] || {
+            echo "::error::Wrapper build is incomplete"
+            exit 1
+          }
+
       - name: Install Emscripten SDK
         run: |
           git clone --depth 1 https://github.com/emscripten-core/emsdk.git /opt/emsdk
@@ -261,30 +271,24 @@ jobs:
             rm -rf candidate-payload
             rm -rf source/wasm
             rm -rf source/variants
+            rm -rf source/dist
           }
           trap cleanup_plaintext EXIT
 
-          mkdir -p candidate-payload/dist
+          mkdir -p candidate-payload/wasm candidate-payload/dist
 
           SOURCE_BUILD_INFO=source/wasm/build-info.json
           [[ -f "$SOURCE_BUILD_INFO" ]] || {
             echo "::error::Source build-info was not emitted by the heavy build"
             exit 1
           }
-          cp source/wasm/soffice.wasm candidate-payload/dist/
+          cp source/wasm/soffice.wasm source/wasm/soffice.cjs source/wasm/soffice.js \
+            source/wasm/soffice.data source/wasm/loader.cjs candidate-payload/wasm/
+          [[ -f source/wasm/soffice.data.js.metadata ]] && cp source/wasm/soffice.data.js.metadata candidate-payload/wasm/
+          cp -r source/dist candidate-payload/dist
           cp source/README.md candidate-payload/ 2>/dev/null || printf 'LO WASM conversion runtime candidate payload.\n' > candidate-payload/README.md
 
-          # Static package face for the candidate payload.
-          cat > candidate-payload/package.json <<'EOF'
-          {
-            "name": "lo-wasm",
-            "version": "0.0.0",
-            "description": "LO WASM",
-            "repository": { "url": "https://example.invalid/source" },
-            "homepage": "https://example.invalid",
-            "bugs": { "url": "https://example.invalid/issues" }
-          }
-          EOF
+          cp source/package.json candidate-payload/package.json
 
           bash ci/build-info-contract.sh create-candidate \
             --output candidate-payload/build-info.json \
@@ -316,7 +320,7 @@ jobs:
             --source-revision "$SOURCE_REVISION" \
             --build-role "$BUILD_ROLE"
           cleanup_plaintext
-          [[ ! -e candidate-payload && ! -e source/wasm && ! -e source/variants ]] || {
+          [[ ! -e candidate-payload && ! -e source/wasm && ! -e source/dist && ! -e source/variants ]] || {
             echo "::error::Plaintext candidate cleanup failed"
             exit 1
           }
