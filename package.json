@@ -1,0 +1,176 @@
+{
+  "name": "@killbus/libreoffice-converter",
+  "version": "1.0.0-acb6102.62414f4328aba1411a192a79f398985468879a44ab1824afdecbba6021522b15",
+  "description": "LibreOffice WASM document conversion toolkit - headless document format conversion",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js",
+      "default": "./dist/browser.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.cjs",
+      "default": "./dist/server.js"
+    },
+    "./types": {
+      "types": "./dist/types-entry.d.ts",
+      "import": "./dist/types-entry.js",
+      "default": "./dist/types-entry.js"
+    },
+    "./wasm/loader": {
+      "require": "./wasm/loader.cjs",
+      "default": "./wasm/loader.cjs"
+    },
+    "./package.json": "./package.json",
+    "./browser-assets": {
+      "types": "./dist/browser-assets.d.ts",
+      "import": "./dist/browser-assets.js",
+      "default": "./dist/browser-assets.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "browser": [
+        "./dist/browser.d.ts"
+      ],
+      "server": [
+        "./dist/server.d.ts"
+      ],
+      "types": [
+        "./dist/types-entry.d.ts"
+      ],
+      "browser-assets": [
+        "./dist/browser-assets.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "README.md",
+    "dist",
+    "wasm/build-info.json",
+    "wasm/loader.cjs",
+    "wasm/soffice.cjs",
+    "wasm/soffice.data",
+    "wasm/soffice.js",
+    "wasm/soffice.wasm"
+  ],
+  "scripts": {
+    "build": "node scripts/build-package.mjs",
+    "build:wasm": "bash build/build-wasm.sh",
+    "dev": "tsx watch src/server.ts",
+    "dev:browser": "node dev-server.mjs",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:ci-conversion": "vitest run tests/converter-gate.test.ts -t 'converts test.docx to a valid PDF' --maxWorkers=1 --minWorkers=1",
+    "test:watch": "vitest",
+    "test:browser": "playwright test",
+    "test:browser:benchmark": "playwright test tests/browser/benchmark.spec.ts",
+    "test:browser:ui": "playwright test --ui",
+    "test:browser:headed": "playwright test --headed",
+    "verify:native-package": "node scripts/verify-native-package-assets.mjs",
+    "runtime:restore": "node scripts/release-runtime/restore-qualified.mjs",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "verify:no-pthread": "node scripts/inspect-no-pthread-runtime.mjs wasm"
+  },
+  "keywords": [
+    "libreoffice",
+    "wasm",
+    "webassembly",
+    "document",
+    "conversion",
+    "pdf",
+    "docx",
+    "xlsx",
+    "pptx",
+    "odt",
+    "ods",
+    "odp"
+  ],
+  "author": "",
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/killbus/libreoffice-wasm-builder"
+  },
+  "bugs": {
+    "url": "https://github.com/killbus/libreoffice-wasm-builder/issues"
+  },
+  "homepage": "https://github.com/killbus/libreoffice-wasm-builder#readme",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "jszip": ">=3.0.0",
+    "sharp": ">=0.32.0"
+  },
+  "peerDependenciesMeta": {
+    "sharp": {
+      "optional": true
+    },
+    "jszip": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@types/node": "^20.10.0",
+    "@types/sharp": "^0.31.1",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "jszip": "^3.10.1",
+    "playwright": "^1.57.0",
+    "semantic-release": "^25.0.2",
+    "sharp": "^0.33.5",
+    "tsup": "^8.0.1",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.2",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "zod": "^4.1.13"
+  },
+  "release": {
+    "branches": [
+      "main"
+    ],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/changelog",
+      "@semantic-release/npm",
+      [
+        "@semantic-release/git",
+        {
+          "assets": [
+            "package.json",
+            "CHANGELOG.md"
+          ],
+          "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        }
+      ],
+      "@semantic-release/github"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
