@@ -285,10 +285,17 @@ jobs:
           cp source/wasm/soffice.wasm source/wasm/soffice.cjs source/wasm/soffice.js \
             source/wasm/soffice.data source/wasm/loader.cjs candidate-payload/wasm/
           [[ -f source/wasm/soffice.data.js.metadata ]] && cp source/wasm/soffice.data.js.metadata candidate-payload/wasm/
-          cp -r source/dist candidate-payload/dist
+          cp -r source/dist/. candidate-payload/dist/    # copy CONTENTS, no extra level
           cp source/README.md candidate-payload/ 2>/dev/null || printf 'LO WASM conversion runtime candidate payload.\n' > candidate-payload/README.md
 
           cp source/package.json candidate-payload/package.json
+
+          for f in browser.js browser.d.ts browser.worker.global.js; do
+            [[ -f "candidate-payload/dist/$f" ]] || { echo "::error::Wrapper layout not flat: candidate-payload/dist/$f missing" >&2; exit 1; }
+          done
+          for f in soffice.wasm soffice.cjs soffice.js soffice.data loader.cjs; do
+            [[ -f "candidate-payload/wasm/$f" ]] || { echo "::error::Native set incomplete: candidate-payload/wasm/$f missing" >&2; exit 1; }
+          done
 
           bash ci/build-info-contract.sh create-candidate \
             --output candidate-payload/build-info.json \
