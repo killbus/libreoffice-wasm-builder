@@ -1,0 +1,35 @@
+{
+  "accepted_at": "2026-10-26T09:43:38Z",
+  "artifact_status": "accepted",
+  "build_role": "prod",
+  "build_timestamp": "2026-10-26T09:43:15Z",
+  "builder_sha": "6b8689d3228da4231c74a9227b37086a67f9bfcf",
+  "candidate_artifact": {
+    "digest": "sha256:c0fb84945376289ee978beea4973acc9f289722046b6cafce4aae41c5da8e706",
+    "id": "12640816020",
+    "name": "lo-wasm-candidate-40259415535-1-target-v1-6fbcfc47cff7343bd736d2d72ec0600ba8cf7419d1758678ea5f92fd29d7163d"
+  },
+  "cipher_profile": "age-x25519-v1",
+  "evidence_version": 1,
+  "expected_outputs": [
+    "soffice.wasm",
+    "build-info.json"
+  ],
+  "focused_embedder_test": {
+    "filter": "LokNoPthreadRuntimeContract.SingleProfileNoWorkerSidecar",
+    "status": "passed"
+  },
+  "key_id": "candidate-2026-10",
+  "lo_source_sha": "acb61022890e36e18b4a0d7336f2a482e059aa67",
+  "payload_digest": "sha256:897b4aa054758d2224e68b6354678b3081b40b33e4b9b49f272024df3c842a75",
+  "release_id": "release-v1-f5c2589e488ba07455f9b97d9ffa0f90dffe188c6685aff67154517156da178e",
+  "repository": "killbus/libreoffice-wasm-builder",
+  "source_contract_version": 1,
+  "source_revision": "acb61022890e36e18b4a0d7336f2a482e059aa67",
+  "target_id": "target-v1-6fbcfc47cff7343bd736d2d72ec0600ba8cf7419d1758678ea5f92fd29d7163d",
+  "transport_digest": "sha256:1867869842ee2cc7c6fc110a5dad5689840f083749e60f143d1ed9404786b02b",
+  "transport_profile": "envelope-v1",
+  "workflow_run_attempt": "1",
+  "workflow_run_id": "40259415535",
+  "workflow_run_number": "13"
+}
